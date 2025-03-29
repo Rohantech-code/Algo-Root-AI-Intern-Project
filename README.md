@@ -89,3 +89,74 @@ async def execute_function(request: RequestBody):
         return {"function": function_name, "code": code}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+#API Code
+import os
+import webbrowser
+import psutil
+import logging
+from fastapi import FastAPI, HTTPException, Body
+
+# Configure Logging
+logging.basicConfig(filename="function_logs.log", level=logging.INFO, format="%(asctime)s - %(message)s")
+
+app = FastAPI()
+
+# Session Context to store previous actions
+session_context = {}
+custom_functions = {}
+
+# Predefined Functions
+def open_chrome():
+    webbrowser.open("https://www.google.com")
+    log_and_store("Opened Chrome")
+    return "Chrome opened successfully."
+
+def open_calculator():
+    os.system("calc")
+    log_and_store("Opened Calculator")
+    return "Calculator opened successfully."
+
+def get_cpu_usage():
+    cpu_usage = f"CPU Usage: {psutil.cpu_percent()}%"
+    log_and_store(cpu_usage)
+    return cpu_usage
+
+# Logging and Context Tracking
+def log_and_store(action):
+    logging.info(action)
+    session_context['last_action'] = action
+
+# API Endpoints
+@app.post("/execute")
+async def execute_function(prompt: str = Body(...)):
+    try:
+        if prompt.lower() == "open chrome":
+            return {"result": open_chrome()}
+        elif prompt.lower() == "open calculator":
+            return {"result": open_calculator()}
+        elif prompt.lower() == "get cpu usage":
+            return {"result": get_cpu_usage()}
+        elif prompt.lower() in custom_functions:
+            exec(custom_functions[prompt.lower()])
+            log_and_store(f"Executed custom function: {prompt}")
+            return {"result": "Custom function executed successfully."}
+        else:
+            raise HTTPException(status_code=404, detail="Function not found.")
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/add_custom_function")
+async def add_custom_function(name: str = Body(...), code: str = Body(...)):
+    try:
+        custom_functions[name.lower()] = code
+        logging.info(f"Custom function '{name}' added.")
+        return {"message": "Custom function added successfully."}
+    except Exception as e:
+        logging.error(f"Error adding custom function: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/last_action")
+async def get_last_action():
+    return {"last_action": session_context.get('last_action', "No actions performed yet.")}
+
